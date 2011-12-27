@@ -674,6 +674,66 @@ function editUser ( $account_id, $name, $surname, $litgroup, $photo_url, $group,
 	return TRUE;
 }
 
+function deleteUser ($account_id) {
+	global $account;
+	
+		if ( $account_id == '' ) {
+			report_error ("Вы не ввели номер пользователя");
+			return FALSE;
+		}
+	
+	$id = account2id ($account_id);
+	
+	if(!mysql_query ("SELECT * FROM `users` WHERE `id` = '$id';"))
+  {  
+			report_error ("Пользователь с такими номером не существует");
+			return FALSE;
+  }
+	
+	$q = mysql_query ("SELECT * FROM `users` WHERE `id` = '$id';");
+	$oldInfo = mysql_fetch_array($q);   
+	$w = mysql_query ("SELECT * FROM `usersgroup` WHERE `id` = '$id';");
+  $oldGroups = mysql_fetch_array($w);
+	
+	mysql_query ("START TRANSACTION;");
+	
+	if ( !mysql_query ("DELETE FROM `Crazy`.`accounts` WHERE `accounts`.`id` = '$account_id' LIMIT 1;") ) {
+		report_error ("Произошла ошибка удаления аккаунта банка"); 
+		mysql_query ("ROLLBACK;");
+		return FALSE;
+	}  
+	if ( !mysql_query ("DELETE FROM `Crazy`.`users` WHERE `users`.`id` = '$id' LIMIT 1;") ) {
+		report_error ("Произошла ошибка удаления пользователя"); 
+		mysql_query ("ROLLBACK;");
+		return FALSE;
+	}
+	  
+	if ( !mysql_query ("DELETE FROM `Crazy`.`usersgroup` WHERE `usersgroup`.`id` = '$id';") ) {
+		report_error ("Произошла ошибка удаления групп пользователя"); 
+		mysql_query ("ROLLBACK;");
+		return FALSE;
+	}
+	
+	$log = 'Удаление пользователя '.$id.'. Параметры аккаунта: name:'.$oldInfo['name'].' surname:'.$oldInfo['surname'].' litgroup:'.$oldInfo['litgroup'].', photo_url:'.$oldInfo['photo_url'].' group:';
+	if(!empty ($oldGroups))
+  {
+    foreach ($oldGroups as $bankgroup) {
+		  $log .= $bankgroup.',';
+	  }
+  }
+	
+	if ( !mysql_query ("
+	INSERT INTO `logs_admin` (`admin_id`, `account_id`, `action`, `ip`)
+	VALUES ('$account[id]', '$id', '$log', '$_SERVER[REMOTE_ADDR]');") ) {
+		report_error ("Произошла ошибка записи в логи. Пользователь не был удаен");
+		return FALSE;
+	}
+	
+	mysql_query ("COMMIT;");
+	
+	return TRUE;
+}
+
 function updateUsersGroup ( $id, $group ) {
 	mysql_query ("START TRANSACTION;");
 	
