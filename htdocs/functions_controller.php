@@ -1044,6 +1044,49 @@ function collect_taxes() {
 	
 	mysql_query ("COMMIT;");
 	return TRUE;
+}  
+
+function distribute_state_balances() {	
+	$state_accounts = getStatesAccounts();	
+
+	mysql_query ("START TRANSACTION;");
+	
+	// распределение для rightwing
+	$infium = 500; //Нижняя граница, с которой начинают начисляться деньги
+  $active_accounts_count = 0;//Количество аккаунтов, на которые нужно перечислять деньги
+  $account_has_governement_group = FALSE; //Определяет, являеться ли данный аккаунт членом правительства
+	$rightwing_id = $state_accounts['rightwing'];
+	foreach ( formAccountArray ('user') as $account )
+  {
+    $account_has_governement_group = FALSE;         
+	  $q = mysql_query("SELECT * FROM  `usersgroup` WHERE  `id` = '".$account['id']."' AND `bankgroup` = 'government'");
+    if (mysql_num_rows($q)!==0) $account_has_governement_group = TRUE; 
+		if ( $account['state'] == 'rightwing' || $account_has_governement_group == TRUE) {
+			$q = mysql_query("SELECT * FROM  `accounts` WHERE  `id` = '".$account['id']."' AND `balance` < $infium");
+			if (mysql_num_rows($q)!==0)continue;
+      
+      $active_accounts_count++; 
+			$accountlist[]=$account['id'];
+			$currency[]=$account['currency'];
+		} 
+  } 
+    
+    $q = mysql_query("SELECT * FROM  `accounts` WHERE  `id` = '".$rightwing_id."';");  
+    $f = mysql_fetch_array($q);
+    $rightwing_balance = $f['balance'];
+    
+    $summ_to_distribute = $rightwing_balance / $active_accounts_count; 
+    
+	foreach ( $accountlist as $key=>$id ) {
+		$account_id_to = id2account($id);
+		if (!transmit ($rightwing_id, $account_id_to, (int)$summ_to_distribute, $currency[$key], 'Распределение бюджета государства')) {
+			mysql_query ("ROLLBACK;");
+			return FALSE;
+		}
+	}
+	
+	mysql_query ("COMMIT;");
+	return TRUE;
 }
 /*
 function increase_state_balance( $account_id, $n ) {
